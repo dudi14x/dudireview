@@ -16,6 +16,7 @@ from flask import Flask, abort, jsonify, request, send_file
 from .geometry import calculate, polygon
 from .vision import proposals, footprint_proposal, room_envelope
 from .semantics import pdf_evidence, scale_from_pdf
+from .pdf_geometry import legend_geometry, apply_legend
 
 ROOT = Path(__file__).resolve().parent
 LOCK = threading.RLock()
@@ -50,7 +51,9 @@ def create_app(data_dir=None):
         return folder
 
     def read(ident):
-        return json.loads((directory(ident)/'result.json').read_text(encoding='utf-8'))
+        result=json.loads((directory(ident)/'result.json').read_text(encoding='utf-8'))
+        if 'regions' in result:result['analysis']=calculate(result)
+        return result
 
     def save(folder, result):
         temporary = folder/'result.tmp'
@@ -101,11 +104,14 @@ def create_app(data_dir=None):
             raise ValueError('Supported formats: PDF, PNG, JPEG. Export CAD drawings to one of these first.')
         image.thumbnail((4096,4096))
         regions, source = proposals(np.array(image), model)
-        footprint = room_envelope(regions) or footprint_proposal(np.array(image))
+        footprint = footprint_proposal(np.array(image))
+        removed_regions = 0
         units = []
         inferred_scale = None
         if suffix == '.pdf':
             with fitz.open(stream=raw, filetype='pdf') as doc:
+                supports, semantic = legend_geometry(doc[page_number-1],image.width,image.height)
+                regions, removed_regions = apply_legend(regions,supports,semantic)
                 units = pdf_evidence(doc[page_number-1], image.width, image.height, regions)
                 # Recover enclosed service-space geometry missed by the room instance model.
                 candidates, _ = proposals(np.array(image), None)
@@ -119,7 +125,7 @@ def create_app(data_dir=None):
                     candidate['geometry_source']='enclosed_lines_with_pdf_label'
                     regions.append(candidate)
                 inferred_scale = scale_from_pdf(doc[page_number-1],image.width)
-        result = {'id': uuid.uuid4().hex, 'name': Path(uploaded.filename.replace('\\','/')).name, 'page':page_number, 'width':image.width, 'height':image.height, 'metres_per_pixel':inferred_scale, 'scale_source':'printed_ratio_unverified' if inferred_scale else 'missing', 'footprint':footprint, 'footprint_source':'room_envelope_proposal', 'units':units, 'regions':regions, 'model_source':source, 'reviewed':False, 'revision':1}
+        result = {'id': uuid.uuid4().hex, 'name': Path(uploaded.filename.replace('\\','/')).name, 'page':page_number, 'width':image.width, 'height':image.height, 'metres_per_pixel':inferred_scale, 'scale_source':'printed_ratio_unverified' if inferred_scale else 'missing', 'footprint':footprint, 'footprint_source':'ink_outline_proposal', 'scale_confirmed':False, 'footprint_confirmed':False, 'filtered_regions':removed_regions, 'units':units, 'regions':regions, 'model_source':source, 'reviewed':False, 'revision':1}
         folder = data/result['id']; folder.mkdir()
         image.save(folder/'drawing.png')
         result['analysis'] = calculate(result)
@@ -140,8 +146,17 @@ def create_app(data_dir=None):
             result = read(ident)
             if body.get('revision') != result['revision']:
                 return jsonify(error='This drawing changed. Reload before saving.'), 409
-            for field in ('metres_per_pixel', 'footprint', 'regions', 'reviewed', 'units', 'scale_source'):
+            previous_scale=result.get('metres_per_pixel')
+            previous_footprint=result.get('footprint')
+            for field in ('metres_per_pixel', 'footprint', 'regions', 'reviewed', 'units', 'scale_source', 'scale_confirmed', 'footprint_confirmed', 'footprint_source'):
                 if field in body: result[field] = body[field]
+            if result.get('metres_per_pixel') != previous_scale:
+                result['scale_source']='user_calibration'
+                result['scale_confirmed']=True
+            if result.get('footprint') != previous_footprint:
+                result['footprint_source']='user_trace'
+                result['footprint_confirmed']=True
+            if any(not isinstance(result.get(key,False),bool) for key in ('scale_confirmed','footprint_confirmed')):raise ValueError('Confirmation flags must be true or false.')
             if not isinstance(result['reviewed'], bool): raise ValueError('Review flag must be true or false.')
             if not isinstance(result['regions'], list) or len(result['regions']) > 1000: raise ValueError('Maximum 1000 regions.')
             for region in result['regions']:
@@ -176,7 +191,7 @@ def create_app(data_dir=None):
     @app.get('/api/projects/<ident>/labels')
     def labels(ident):
         result = read(ident)
-        if not result['reviewed'] or not result['footprint']:
+        if not result['reviewed'] or not result['footprint'] or not result['analysis']['measurement_status']['boundary_confirmed']:
             raise ValueError('Trace the footprint and mark the drawing reviewed before exporting training labels.')
         mask = np.zeros((result['height'],result['width']),np.uint8)
         cv2.fillPoly(mask,[np.rint(result['footprint']).astype(np.int32)],255)

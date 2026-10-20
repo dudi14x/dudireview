@@ -18,7 +18,7 @@ def region(i,points,kind='room',occupancy='unclassified'):
 
 
 def test_area_exclusions_and_overlap():
-    r={'metres_per_pixel':.1,'footprint':rect(0,0,100,100),'regions':[region(1,rect(0,0,60,100)),region(2,rect(40,0,60,100)),region(3,rect(0,0,100,10),'corridor')]}
+    r={'metres_per_pixel':.1,'scale_confirmed':True,'footprint_confirmed':True,'footprint':rect(0,0,100,100),'regions':[region(1,rect(0,0,60,100)),region(2,rect(40,0,60,100)),region(3,rect(0,0,100,10),'corridor')]}
     a=calculate(r)
     assert a['gross_floor_area_m2']==100
     assert a['net_room_area_m2']==90
@@ -179,3 +179,47 @@ def test_windows_default_encoding_dashboard_and_unicode_projects(client,tmp_path
     (folder/'result.json').write_text(json.dumps({'id':ident,'name':name},ensure_ascii=False),encoding='utf-8')
     assert c.get('/api/projects/'+ident).json['name']==name
     assert c.get('/api/projects').json[0]['name']==name
+
+
+def test_unverified_scale_and_outline_do_not_create_measurements_or_clip_rooms():
+    r={'metres_per_pixel':.1,'scale_source':'printed_ratio_unverified','footprint_source':'ink_outline_proposal','footprint':rect(0,0,10,10),'regions':[region(1,rect(0,0,20,10))]}
+    a=calculate(r)
+    assert a['gross_floor_area_m2'] is None and a['net_room_area_m2'] is None
+    assert a['estimates']['net_detected_room_area_m2']==2
+    r['scale_confirmed']=True
+    a=calculate(r)
+    assert a['net_room_area_m2']==2 and a['gross_floor_area_m2'] is None
+    r['footprint_confirmed']=True
+    a=calculate(r)
+    assert a['gross_floor_area_m2']==1 and a['net_room_area_m2']==1
+    assert not a['measurement_status']['complete_floor_net_area']
+
+
+def test_concave_floor_area_and_render_resolution_invariance():
+    points=[[0,0],[100,0],[100,50],[50,50],[50,100],[0,100]]
+    for factor in (.5,1,2):
+        scaled=[[x*factor,y*factor] for x,y in points]
+        a=calculate({'metres_per_pixel':.1/factor,'scale_confirmed':True,'footprint_confirmed':True,'footprint':scaled,'regions':[region(1,scaled)]})
+        assert a['gross_floor_area_m2']==75 and a['net_room_area_m2']==75
+
+
+def test_explicit_pdf_legend_recovers_mep_and_rejects_false_room():
+    from floorreview.pdf_geometry import legend_geometry,apply_legend
+    doc=fitz.open();page=doc.new_page(width=400,height=300)
+    page.insert_text((300,40),'LEGEND')
+    page.draw_rect(fitz.Rect(300,50,310,60),fill=(.7,.7,.7))
+    page.insert_text((315,59),'MEP')
+    page.draw_rect(fitz.Rect(40,80,80,140),fill=(.7,.7,.7))
+    support,semantic=legend_geometry(page,400,300)
+    assert len(semantic)==1 and semantic[0]['occupancy']=='mep'
+    assert semantic[0]['polygon'] and len(support)==1
+    regions,removed=apply_legend([region(1,rect(150,10,30,30))],support,semantic)
+    assert removed==1 and len(regions)==1 and regions[0]['occupancy']=='mep'
+    assert regions[0]['geometry_source']=='pdf_legend_vector'
+
+
+def test_gray_without_legend_is_not_automatically_mep():
+    from floorreview.pdf_geometry import legend_geometry
+    doc=fitz.open();page=doc.new_page()
+    page.draw_rect(fitz.Rect(40,80,80,140),fill=(.7,.7,.7))
+    assert legend_geometry(page,400,300)==([],[])

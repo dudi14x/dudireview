@@ -67,8 +67,8 @@ def proposals(image, model_path=None):
 def footprint_proposal(image):
     """Propose the largest connected drawing outline; explicit review is required."""
     gray = cv2.cvtColor(image, cv2.COLOR_RGB2GRAY)
-    ink = (gray < 170).astype(np.uint8)
-    ink = cv2.morphologyEx(ink, cv2.MORPH_CLOSE, np.ones((5,5),np.uint8))
+    ink = (gray < 90).astype(np.uint8)
+    ink = cv2.morphologyEx(ink, cv2.MORPH_CLOSE, np.ones((3,3),np.uint8))
     contours, _ = cv2.findContours(ink, cv2.RETR_LIST, cv2.CHAIN_APPROX_SIMPLE)
     h,w=gray.shape
     candidates=[]

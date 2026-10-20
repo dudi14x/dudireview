@@ -21,14 +21,14 @@ The server listens on port 8765, loopback by default. Use your hosting platform'
 
 1. Select one or multiple PDF/PNG/JPEG files. The durable queue admits up to 1,000 pending drawings, two processing workers, 32 MiB per upload. Select a PDF page (one selected page per document per submission). CAD formats require PDF export.
 2. Open a finished result. View room polygon proposals over the plan, candidate 1/2/3-bed mix, MEP count, room schedule and occupancy totals.
-3. Calibrate using two image points and a known real distance in metres. A unique printed PDF `1:N` ratio supplies an explicitly unverified scale estimate; raster images require calibration. Do not infer scale from a page's pixel width alone.
-4. Review the proposed floor outline and room polygons. Trace/edit them when needed. Assign stairs, corridors, walls and voids as excluded regions. Assign residential / MEP / commercial / common occupancy and apartment unit IDs. Candidate unit markers do not establish unit boundaries or assign rooms to apartments automatically.
+3. Calibrate using two image points and a known real distance in metres. A unique printed PDF `1:N` ratio supplies a suggested scale, but metric measurements remain pending until you calibrate or explicitly confirm it. Raster images require calibration. Do not infer scale from a page's pixel width alone.
+4. Review the proposed floor outline and room polygons. The outline now comes from closed dark linework, never a connect-the-dots envelope of room detections. Check **Exterior boundary checked against the drawing**, or trace the perimeter yourself, before a gross floor measurement is reported. Trace/edit them when needed. Assign stairs, corridors, walls and voids as excluded regions. Assign residential / MEP / commercial / common occupancy and apartment unit IDs. Candidate unit markers do not establish unit boundaries or assign rooms to apartments automatically.
 5. Correct the unit register, mark review complete, save, and download JSON/CSV or reviewed training labels.
 
 ### Area definitions
 
 - Gross floor area: traced outer footprint polygon, including walls and circulation. This is a geometric definition, not a jurisdiction-specific regulatory GFA calculation.
-- Net room area: union of room polygons clipped to the footprint, minus explicitly classified exclusions. Overlaps are counted once in the total.
+- Net room area: union of room polygons clipped only to a user-confirmed footprint, minus explicitly classified exclusions. An unconfirmed outline never clips room areas. Overlaps are counted once in the total.
 - Individual room areas: each room minus exclusions. Overlapping room entries are flagged because individual sums can exceed the union.
 - Unallocated area: footprint minus occupied room union and exclusions. Unknown residual is never automatically called a wall.
 - Group totals: polygon unions within occupancy and unit assignments. Different overlapping groups can still overlap and are flagged.
@@ -37,7 +37,7 @@ The server listens on port 8765, loopback by default. Use your hosting platform'
 
 `upload → persistent SQLite queue → PDF rasterization/image decoding → tiled pretrained YOLO room segmentation → polygon cleanup → optional embedded-PDF label evidence → metric geometry → reviewable dashboard → export/training labels`.
 
-ArchVision's checkpoint is the default room detector. It learns image geometry; areas come from calibrated polygons, not printed area text. Optional embedded PDF labels supplement naming/classification and unit-marker candidates. Scanned-plan text OCR is not implemented. No label means unclassified, not an invented occupancy. MEP and apartment grouping across arbitrary plan styles remain supervised review tasks until representative models and validation exist.
+ArchVision's checkpoint is the default room detector. When a vector PDF contains an explicit color legend, matching vector fills provide MEP/circulation/exterior-zone evidence, and unsupported model proposals outside those filled spaces are filtered. Colors without a matching legend do not establish an occupancy. It learns image geometry; areas come from calibrated polygons, not printed area text. Optional embedded PDF labels supplement naming/classification and unit-marker candidates. Scanned-plan text OCR is not implemented. No label means unclassified, not an invented occupancy. MEP and apartment grouping across arbitrary plan styles remain supervised review tasks until representative models and validation exist.
 
 The fallback geometry detector and CPU random forest are available by setting `FLOORREVIEW_MODEL` to a missing file or `models/segmenter.joblib`. `models/plan-unet.pt` selects the compact neural segmentation model. Training does not silently replace the active detector.
 
@@ -60,3 +60,5 @@ Backend tests exercise area arithmetic, overlapping rooms, exclusions, geometry 
 Model weights, private drawings, training datasets, output results and the virtual environment are ignored by Git. `scripts/fetch_model.py` reproduces the exact upstream checkpoint with checksum verification. `scripts/start.sh` restarts the service; live processes are not part of a saved environment snapshot.
 
 If setup reports no compatible Python, install the **Windows installer (64-bit)** from https://www.python.org/downloads/release/python-31210/ and enable the launcher. Then run `START.bat` again. You do not need to uninstall newer Python versions. On Windows the environment is `.venv-win`; run tests with `.venv-win\Scripts\python.exe -m pytest -q`.
+
+Accuracy and dataset planning: [docs/DATASET_PLAN.md](docs/DATASET_PLAN.md). Updates to geometry processing require re-uploading an old drawing to run detection again; opening old results only refreshes their measurement-status calculations.

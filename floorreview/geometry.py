@@ -20,7 +20,11 @@ def calculate(result):
     scale = result.get('metres_per_pixel')
     if scale is not None and (not isinstance(scale, (int, float)) or not math.isfinite(scale) or scale <= 0):
         raise ValueError('Scale must be a positive metres-per-pixel value.')
-    footprint = polygon(result['footprint']) if result.get('footprint') else None
+    proposed_footprint = polygon(result['footprint']) if result.get('footprint') else None
+    scale_confirmed=bool(scale and result.get('scale_confirmed',result.get('scale_source')=='user_calibration'))
+    boundary_confirmed=bool(proposed_footprint is not None and result.get('footprint_confirmed',result.get('footprint_source')=='user_trace'))
+    # An inferred outline must not silently cut off valid room interiors.
+    footprint = proposed_footprint if boundary_confirmed else None
     shapes = []
     identifiers = set()
     for entity in result['regions']:
@@ -35,19 +39,25 @@ def calculate(result):
         shapes.append((entity, shape))
     exclusions = unary_union([s for r, s in shapes if r['kind'] != 'room'])
     rooms = [(r, s.difference(exclusions)) for r, s in shapes if r['kind'] == 'room']
-    def area(shape):
+    def estimate(shape):
         return round(shape.area * scale * scale, 4) if scale else None
+    def area(shape):
+        return estimate(shape) if scale_confirmed else None
     total = unary_union([s for _, s in rooms])
     overlap = sum(s.area for _, s in rooms) - total.area
     warnings = []
     if scale is None:
         warnings.append('Set a measured reference distance to obtain square metres.')
-    if result.get('scale_source')=='printed_ratio_unverified':
+    if scale is not None and not scale_confirmed:
+        warnings.append('Confirm the scale against a known dimension before metric measurements are reported.')
+    if result.get('scale_source')=='printed_ratio_unverified' and not scale_confirmed:
         warnings.append('Areas are estimates from the printed PDF ratio. Verify against a known dimension; resized sheets and multiple viewports can invalidate this scale.')
-    if result.get('footprint_source') in ('automatic_outline_proposal','room_envelope_proposal') and not result.get('reviewed'):
+    if proposed_footprint is not None and not boundary_confirmed:
         warnings.append('Gross area uses a proposed outline, which may omit exterior walls, balconies or disconnected wings. Confirm the entire exterior boundary before using the area.')
-    if footprint is None:
-        warnings.append('Trace the outer floor boundary to calculate gross floor area.')
+    if not boundary_confirmed:
+        warnings.append('Trace or explicitly confirm the exterior floor boundary to calculate gross floor area. A shape inferred from rooms is not a measured floor perimeter.')
+    if footprint is not None and any(s.is_empty for _,s in shapes):
+        warnings.append('Some regions lie outside the confirmed floor boundary and have zero measured area.')
     if overlap > 0.01:
         warnings.append('Room polygons overlap. Individual room and group totals may overlap; net total uses their union.')
     if result.get('model_source') == 'synthetic':
@@ -58,12 +68,15 @@ def calculate(result):
         warnings.append('Unit counts are marker candidates until reviewed; legends, duplicates and missing markers can affect counts.')
     if not result.get('reviewed'):
         warnings.append('Automatic suggestions require boundary and classification review.')
+    warnings.append('Detected room area is not the entire floor net area: missed rooms are not included.')
     groups = {}
     for field in ('occupancy', 'unit'):
         keys = sorted({str(r.get(field) or 'unassigned') for r, _ in rooms})
         groups[field] = {key: area(unary_union([s for r, s in rooms if str(r.get(field) or 'unassigned') == key])) for key in keys}
     return {
-        'units': 'm²' if scale else 'uncalibrated',
+        'units': 'm²' if scale_confirmed else 'uncalibrated',
+        'measurement_status':{'scale_confirmed':scale_confirmed,'boundary_confirmed':boundary_confirmed,'net_scope':'detected_room_union_only','complete_floor_net_area':False},
+        'estimates':{'gross_floor_area_m2':estimate(proposed_footprint) if proposed_footprint is not None else None,'net_detected_room_area_m2':estimate(total),'not_verified':True},
         'unit_counts': {f'{n} bed': sum(u['bedrooms']==n for u in result.get('units', [])) for n in sorted({u['bedrooms'] for u in result.get('units', [])})},
         'unit_count_source': 'unverified_pdf_markers_or_user_review',
         'mep_space_count':sum(r['occupancy']=='mep' for r, _ in rooms),

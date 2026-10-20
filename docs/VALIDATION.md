@@ -39,3 +39,11 @@ The original cloud-specific package pins did not install on the supplied Windows
 ## Windows text encoding regression
 
 Dashboard, project JSON, metrics and training configuration text files now use explicit UTF-8. A regression test simulates a CP1252 Windows default and verifies the dashboard and an Arabic/Unicode project filename. The Windows launcher also enables Python UTF-8 mode.
+
+## Area and MEP correction
+
+17 tests passed after correcting unverified scale/outline measurement status, guessed-outline clipping, resolution-invariant and concave polygon area calculations, and explicit-legend MEP extraction. The tower sample now yields four vector MEP candidates based on its own MEP color legend. This is not model retraining, independent area ground truth, or proof of complete MEP coverage. The dense engineering sample lacks a usable color legend and still requires supervised classification.
+
+Dark linework supplies only an outline proposal. A room-envelope guess no longer supplies a floor perimeter or clips room measurements. Legacy results are recalculated on read; re-uploading is required to regenerate geometry and legend detections. The current fixes do not establish accuracy on the newly screenshotted multi-wing plan, whose source PDF has not been supplied.
+
+Chromium checks passed for pending-scale guidance, four MEP locate buttons and purple-only highlighting, scale/boundary confirmation, save and reload. The tower PDF produces four legend-derived MEP vector candidates; the engineering PDF still has no automatic MEP classification. No new detector weights were trained or promoted in this correction.
