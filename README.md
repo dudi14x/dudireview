@@ -6,9 +6,9 @@ Upload architectural drawings and receive a dashboard of proposed floor geometry
 
 Use 64-bit Python 3.10, 3.11 or 3.12. Python 3.12 is tested on Linux; Windows wheel availability is checked for Python 3.10. CUDA is optional for training. Git is not required to run a downloaded ZIP.
 
-On Windows, extract the ZIP completely and double-click `START.bat`. Keep the terminal open, then visit `http://localhost:8765`. If Python is missing, install Python 3.12 (64-bit) and select **Add python.exe to PATH**.
+On Windows, extract the ZIP completely and double-click `START.bat`. The installer selects Python 3.12/3.11/3.10 through the Windows `py` launcher when available and uses a separate `.venv-win` folder. Other Python versions can remain installed. Keep the terminal open, then visit `http://localhost:8765`. If Python is missing, install Python 3.12 (64-bit) and select **Add python.exe to PATH**.
 
-If an older download fails with `torch==2.14.1`, download the latest branch ZIP and rerun `START.bat`. The corrected installer uses the matching CPU pair `torch==2.8.0` / `torchvision==0.23.0`. It can reuse the existing `.venv`; deleting your drawings or results is unnecessary.
+If an older download fails with `torch==2.14.1`, download the latest branch ZIP and rerun `START.bat`. The corrected installer uses the matching CPU pair `torch==2.8.0` / `torchvision==0.23.0`. The Windows installer uses `.venv-win` to avoid incompatible environments left by earlier installers; deleting your drawings or results is unnecessary.
 
 ```bash
 bash scripts/setup.sh
@@ -58,3 +58,5 @@ node --check floorreview/static/app.js
 Backend tests exercise area arithmetic, overlapping rooms, exclusions, geometry rejection, scale absence, PDF/image upload, review persistence, stale updates, results and mask exports, actual training/inference, queue success/failure and 1,000-item admission capacity. Capacity testing is not a benchmark of 1,000 full model inferences. Browser checks use Chromium; real uploaded PDFs are exercised separately without claiming ground-truth accuracy.
 
 Model weights, private drawings, training datasets, output results and the virtual environment are ignored by Git. `scripts/fetch_model.py` reproduces the exact upstream checkpoint with checksum verification. `scripts/start.sh` restarts the service; live processes are not part of a saved environment snapshot.
+
+If setup reports no compatible Python, install the **Windows installer (64-bit)** from https://www.python.org/downloads/release/python-31210/ and enable the launcher. Then run `START.bat` again. You do not need to uninstall newer Python versions. On Windows the environment is `.venv-win`; run tests with `.venv-win\Scripts\python.exe -m pytest -q`.
