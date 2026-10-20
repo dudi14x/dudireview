@@ -31,3 +31,7 @@ The concept sheet has no accepted scale and its metric fields remain unavailable
 - Easy synthetic diagrams do not measure architectural-plan generalization. No newly trained model is claimed accurate on real drawings. The active model remains the pretrained ArchVision checkpoint.
 
 A review-labeled, project-separated real dataset and held-out evaluation are required for the unattended three-phase target. A saved environment configuration is not publication or fresh-task restoration validation.
+
+## Installer portability correction
+
+The original cloud-specific package pins did not install on the supplied Windows machine. They were replaced with released dependency versions and the matching PyTorch 2.8.0 / torchvision 0.23.0 CPU pair. Every direct requirement was downloaded as a Windows x64 Python 3.10-compatible wheel. A separate clean Linux Python 3.12 environment passed installation, all 12 tests, pip dependency checks, pretrained checkpoint inference, and dashboard/health requests with PyTorch 2.8.0+cpu and torchvision 0.23.0+cpu. The official CPU index lists both Python 3.10 Windows x64 wheels. This is not a native Windows runtime test. The public pretrained checkpoint was downloaded over verified HTTPS and its SHA-256 checked; Git is no longer required for ZIP users.

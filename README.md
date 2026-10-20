@@ -4,7 +4,11 @@ Upload architectural drawings and receive a dashboard of proposed floor geometry
 
 ## Run
 
-Python 3.12, Git, and CPU are sufficient; CUDA is optional for model training.
+Use 64-bit Python 3.10, 3.11 or 3.12. Python 3.12 is tested on Linux; Windows wheel availability is checked for Python 3.10. CUDA is optional for training. Git is not required to run a downloaded ZIP.
+
+On Windows, extract the ZIP completely and double-click `START.bat`. Keep the terminal open, then visit `http://localhost:8765`. If Python is missing, install Python 3.12 (64-bit) and select **Add python.exe to PATH**.
+
+If an older download fails with `torch==2.14.1`, download the latest branch ZIP and rerun `START.bat`. The corrected installer uses the matching CPU pair `torch==2.8.0` / `torchvision==0.23.0`. It can reuse the existing `.venv`; deleting your drawings or results is unnecessary.
 
 ```bash
 bash scripts/setup.sh
