@@ -155,3 +155,27 @@ def test_pdf_unit_marker_conventions_and_legend():
     for x,y,text in [(50,50,'1BR'),(50,80,'1BD'),(100,50,'2BR-A'),(380,150,'LEGEND'),(400,180,'1BR')]:page.insert_text((x,y),text)
     units=pdf_evidence(page,500,500,[])
     assert sorted(u['bedrooms'] for u in units)==[1,2]
+
+
+def test_windows_default_encoding_dashboard_and_unicode_projects(client,tmp_path,monkeypatch):
+    """Reproduce a Windows CP1252 default without needing a Windows host."""
+    from pathlib import Path
+    original_read=Path.read_text
+    original_write=Path.write_text
+    def windows_read(self,encoding=None,errors=None):
+        return original_read(self,encoding=encoding or 'cp1252',errors=errors)
+    def windows_write(self,data,encoding=None,errors=None,newline=None):
+        return original_write(self,data,encoding=encoding or 'cp1252',errors=errors,newline=newline)
+    monkeypatch.setattr(Path,'read_text',windows_read)
+    monkeypatch.setattr(Path,'write_text',windows_write)
+    c,h=client
+    response=c.get('/')
+    assert response.status_code==200
+    assert 'FloorReview — Drawing intelligence' in response.text
+    assert 'm²' in response.text
+    ident='a'*32
+    folder=tmp_path/ident;folder.mkdir()
+    name='Étage – مخطط الطابق'
+    (folder/'result.json').write_text(json.dumps({'id':ident,'name':name},ensure_ascii=False),encoding='utf-8')
+    assert c.get('/api/projects/'+ident).json['name']==name
+    assert c.get('/api/projects').json[0]['name']==name

@@ -12,4 +12,4 @@ for path in Path('/workspace/attachments').glob('*/*.pdf'):
     r=response.json
     reports.append({'name':path.name,'id':r['id'],'seconds':round(time.monotonic()-start,2),'model':r['model_source'],'region_candidates':len(r['regions']),'unit_candidates':r['analysis']['unit_counts'],'mep_candidates':r['analysis']['mep_space_count'],'footprint_vertices':len(r['footprint'] or []),'scale':r['metres_per_pixel'],'accuracy_status':'No reviewed ground truth; detection counts are not accuracy scores.'})
     print(json.dumps(reports[-1]),flush=True)
-Path('data/real-drawing-validation.json').write_text(json.dumps(reports,indent=2))
+Path('data/real-drawing-validation.json').write_text(json.dumps(reports,indent=2), encoding='utf-8')

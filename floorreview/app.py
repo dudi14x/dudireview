@@ -50,25 +50,25 @@ def create_app(data_dir=None):
         return folder
 
     def read(ident):
-        return json.loads((directory(ident)/'result.json').read_text())
+        return json.loads((directory(ident)/'result.json').read_text(encoding='utf-8'))
 
     def save(folder, result):
         temporary = folder/'result.tmp'
-        temporary.write_text(json.dumps(result, allow_nan=False))
+        temporary.write_text(json.dumps(result, allow_nan=False), encoding='utf-8')
         temporary.replace(folder/'result.json')
 
     @app.get('/')
     def index():
-        return (ROOT/'static/index.html').read_text().replace('__TOKEN__', token)
+        return (ROOT/'static/index.html').read_text(encoding='utf-8').replace('__TOKEN__', token)
 
     @app.get('/api/health')
     def health():
         metrics=model.with_suffix('.metrics.json')
-        return jsonify(status='ok', model_available=model.exists(), model_name=model.name, metrics=json.loads(metrics.read_text()) if metrics.exists() else None, training_runs=[{'checkpoint':p.with_suffix('').with_suffix('.pt' if 'unet' in p.name else '.joblib').name,'report':json.loads(p.read_text())} for p in (ROOT.parent/'models').glob('*.metrics.json')])
+        return jsonify(status='ok', model_available=model.exists(), model_name=model.name, metrics=json.loads(metrics.read_text(encoding='utf-8')) if metrics.exists() else None, training_runs=[{'checkpoint':p.with_suffix('').with_suffix('.pt' if 'unet' in p.name else '.joblib').name,'report':json.loads(p.read_text(encoding='utf-8'))} for p in (ROOT.parent/'models').glob('*.metrics.json')])
 
     @app.get('/api/projects')
     def projects():
-        return jsonify([{'id': r['id'], 'name': r['name']} for r in [json.loads(p.read_text()) for p in sorted(data.glob('*/result.json'), key=lambda p:p.stat().st_mtime, reverse=True)]])
+        return jsonify([{'id': r['id'], 'name': r['name']} for r in [json.loads(p.read_text(encoding='utf-8')) for p in sorted(data.glob('*/result.json'), key=lambda p:p.stat().st_mtime, reverse=True)]])
 
     @app.post('/api/projects')
     def upload():

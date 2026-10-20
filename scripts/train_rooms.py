@@ -12,7 +12,7 @@ parser=argparse.ArgumentParser()
 parser.add_argument('--data',required=True);parser.add_argument('--epochs',type=int,default=60)
 parser.add_argument('--batch',type=int,default=4);parser.add_argument('--device',default='cpu')
 args=parser.parse_args()
-path=Path(args.data).resolve();config=yaml.safe_load(path.read_text())
+path=Path(args.data).resolve();config=yaml.safe_load(path.read_text(encoding='utf-8'))
 if not isinstance(config,dict) or any(k in config for k in ('download',)):
     raise ValueError('Use a local, reviewed dataset YAML without executable download actions.')
 for split in ('train','val'):

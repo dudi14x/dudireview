@@ -1,5 +1,6 @@
 @echo off
 setlocal
+set "PYTHONUTF8=1"
 cd /d "%~dp0"
 call :find_python
 if errorlevel 1 goto missing_python

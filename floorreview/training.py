@@ -75,7 +75,7 @@ def train(data, output, source='annotated'):
     report = {'source': source, 'train_drawings': len(xs), 'validation_drawings': count, 'class_iou': ious, 'mean_iou_present_classes': float(np.mean([v for v in ious.values() if v is not None])), 'trained_classes': [CLASSES[int(i)] for i in model.classes_], 'confusion_matrix': matrix.tolist()}
     output = Path(output); output.parent.mkdir(parents=True, exist_ok=True)
     joblib.dump({'model': model, 'source': source, 'classes': CLASSES, 'metrics': report}, output)
-    output.with_suffix('.metrics.json').write_text(json.dumps(report, indent=2))
+    output.with_suffix('.metrics.json').write_text(json.dumps(report, indent=2), encoding='utf-8')
     return report
 
 if __name__ == '__main__':

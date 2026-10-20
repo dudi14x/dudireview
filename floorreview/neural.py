@@ -97,9 +97,9 @@ def train_unet(data,output,epochs=12,source='annotated'):
             best=mean;output=Path(output);output.parent.mkdir(parents=True,exist_ok=True)
             report={'source':source,'architecture':'PlanUNet-16','train_drawings':len(training),'validation_drawings':len(validation),'validation_resolution':[256,256],'class_iou':iou,'mean_iou':mean,'trained_classes':[CLASSES[i] for i in range(6) if present[i]],'best_epoch':epoch+1,'device':device,'confusion_matrix':matrix.tolist()}
             torch.save({'state_dict':{k:v.cpu() for k,v in model.state_dict().items()},'source':source,'metrics':report},output)
-            output.with_suffix('.metrics.json').write_text(json.dumps(report,indent=2))
-    output.with_suffix('.history.json').write_text(json.dumps(history,indent=2))
-    return json.loads(output.with_suffix('.metrics.json').read_text())
+            output.with_suffix('.metrics.json').write_text(json.dumps(report,indent=2), encoding='utf-8')
+    output.with_suffix('.history.json').write_text(json.dumps(history,indent=2), encoding='utf-8')
+    return json.loads(output.with_suffix('.metrics.json').read_text(encoding='utf-8'))
 
 if __name__=='__main__':
     parser=argparse.ArgumentParser();parser.add_argument('--data',required=True);parser.add_argument('--output',default='models/plan-unet.pt');parser.add_argument('--epochs',type=int,default=12);parser.add_argument('--synthetic',action='store_true');args=parser.parse_args()

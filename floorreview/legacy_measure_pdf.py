@@ -114,7 +114,7 @@ def analyse(pdf,out):
     db.execute('CREATE TABLE segments(id INTEGER PRIMARY KEY,page INTEGER,path_id INTEGER,chain_id INTEGER,kind TEXT,length_pt REAL,length_error_bound_pt REAL,length_m_estimate REAL,duplicate_of INTEGER,points_json TEXT)')
     db.executemany('INSERT INTO segments VALUES(?,?,?,?,?,?,?,?,?,?)',[[r[c] for c in columns]+[json.dumps(r['points'])] for r in all_rows]);db.commit();db.close()
     summary={'pages':pages,'segment_count':len(all_rows),'connected_paths':len(chains),'duplicate_segments':sum(r['duplicate_of'] is not None for r in all_rows),'trained_model':False,'architecture_accuracy_verified':False}
-    (out/'summary.json').write_text(json.dumps(summary,indent=2));print(json.dumps(summary,indent=2))
+    (out/'summary.json').write_text(json.dumps(summary,indent=2), encoding='utf-8');print(json.dumps(summary,indent=2))
     return report
 
 if __name__=='__main__':

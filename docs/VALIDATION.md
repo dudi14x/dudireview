@@ -35,3 +35,7 @@ A review-labeled, project-separated real dataset and held-out evaluation are req
 ## Installer portability correction
 
 The original cloud-specific package pins did not install on the supplied Windows machine. They were replaced with released dependency versions and the matching PyTorch 2.8.0 / torchvision 0.23.0 CPU pair. Every direct requirement was downloaded as a Windows x64 Python 3.10-compatible wheel. A separate clean Linux Python 3.12 environment passed installation, all 12 tests, pip dependency checks, pretrained checkpoint inference, and dashboard/health requests with PyTorch 2.8.0+cpu and torchvision 0.23.0+cpu. The official CPU index lists both Python 3.10 Windows x64 wheels. This is not a native Windows runtime test. The public pretrained checkpoint was downloaded over verified HTTPS and its SHA-256 checked; Git is no longer required for ZIP users.
+
+## Windows text encoding regression
+
+Dashboard, project JSON, metrics and training configuration text files now use explicit UTF-8. A regression test simulates a CP1252 Windows default and verifies the dashboard and an Arabic/Unicode project filename. The Windows launcher also enables Python UTF-8 mode.
