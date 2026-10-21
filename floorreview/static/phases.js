@@ -27,7 +27,7 @@ function refreshPhase(){
 function setPhase(phase){
  if(!phaseOrder.includes(phase))return;
  currentPhase=phase;window.frCurrentPhase=phase;mepOnly=false;$('showMep').textContent='Show MEP only';points=[];mode='select';
- activeGeminiReview=null;$('geminiOutput').replaceChildren();$('geminiApply').disabled=true;$('geminiMessage').textContent='';refreshPhase();
+ activeGeminiReview=null;$('geminiDownload').disabled=true;$('geminiOutput').replaceChildren();$('geminiApply').disabled=true;$('geminiMessage').textContent='';refreshPhase();
 }
 for(const button of document.querySelectorAll('[data-phase]')){
  button.onclick=()=>setPhase(button.dataset.phase);
@@ -46,7 +46,7 @@ async function loadGeminiStatus(){
  $('geminiSetup').open=!geminiSettings.configured;
 }
 function showGemini(review){
- activeGeminiReview=review;$('geminiOutput').replaceChildren();
+ activeGeminiReview=review;$('geminiDownload').disabled=false;$('geminiOutput').replaceChildren();
  const summary=document.createElement('p');summary.textContent=review.summary;$('geminiOutput').append(summary);
  const details=document.createElement('p');details.className='muted';details.textContent=`${review.model} · ${review.cached?'Cached review':'New review'} · ${review.reviewed_regions}/${review.total_regions} zones provided. Confidence is a model estimate, not tested accuracy.`;$('geminiOutput').append(details);
  const issues=document.createElement('ul');for(const text of review.issues){const li=document.createElement('li');li.textContent=text;issues.append(li)}$('geminiOutput').append(issues);
@@ -60,25 +60,33 @@ function showGemini(review){
  if(!review.suggestions.length){const p=document.createElement('p');p.textContent='No label suggestions were returned. Review the issues above.';$('geminiOutput').append(p)}
  $('geminiApply').disabled=true;
 }
-$('geminiReview').onclick=action(async()=>{
+async function requestGemini(allPhases=false){
  if(!project)throw Error('Upload or open a drawing first.');
  if(dirty)throw Error('Save your drawing changes before requesting Gemini review.');
  if(!$('geminiConsent').checked)throw Error('Select the checkbox to send the drawing image to Google Gemini.');
- const id=project.id,phase=currentPhase,revision=project.revision;
- $('geminiReview').disabled=true;$('geminiApply').disabled=true;$('geminiMessage').textContent='Requesting visual review…';
+ const id=project.id,phase=allPhases?'all':currentPhase,revision=project.revision;
+ $('geminiReview').disabled=true;$('geminiAll').disabled=true;$('geminiApply').disabled=true;$('geminiMessage').textContent='Requesting visual review…';
  try{
   const review=await api(`/api/projects/${id}/gemini`,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({phase,revision,consent:true})});
-  if(project.id!==id||currentPhase!==phase||project.revision!==revision||dirty){status('Gemini review finished for an earlier drawing state. Reload or request review again.');return;}
+  if(project.id!==id||(!allPhases&&currentPhase!==phase)||project.revision!==revision||dirty){status('Gemini review finished for an earlier drawing state. Reload or request review again.');return;}
   showGemini(review);$('geminiMessage').textContent='Suggestions are separate from your analysis. Select labels to apply; geometry and calibration stay unchanged.';
  }catch(error){$('geminiMessage').textContent=error.message;throw error}
- finally{$('geminiReview').disabled=false;await loadGeminiStatus();}
-});
+ finally{$('geminiReview').disabled=false;$('geminiAll').disabled=false;await loadGeminiStatus();}
+}
+$('geminiReview').onclick=action(()=>requestGemini(false));
+$('geminiAll').onclick=action(()=>requestGemini(true));
+$('geminiDownload').onclick=()=>{
+ if(!activeGeminiReview)return;
+ const payload={drawing:project.name,revision:project.revision,analysis:project.analysis,regions:project.regions,units:project.units||[],ai_interpretation:activeGeminiReview,limitations:'AI suggestions are unverified. Measurements are computed from geometry; see measurement status and scale evidence.',scale_evidence:project.scale_detection};
+ const url=URL.createObjectURL(new Blob([JSON.stringify(payload,null,2)],{type:'application/json'}));
+ const link=document.createElement('a');link.href=url;link.download='floorreview-ai-analysis.json';link.click();setTimeout(()=>URL.revokeObjectURL(url),1000);
+};
 $('geminiApply').onclick=action(async()=>{
  if(!activeGeminiReview)throw Error('Request a review first.');
  if(dirty)throw Error('Save changes and request a fresh review first.');
  const region_ids=[...document.querySelectorAll('.gemini-choice:checked')].map(c=>Number(c.value));
  const updated=await api(`/api/projects/${project.id}/gemini/apply`,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({review_id:activeGeminiReview.review_id,revision:project.revision,region_ids})});
- project=updated;activeGeminiReview=null;render();$('geminiApply').disabled=true;for(const box of document.querySelectorAll('.gemini-choice'))box.disabled=true;
+ project=updated;activeGeminiReview=null;$('geminiDownload').disabled=true;render();$('geminiApply').disabled=true;for(const box of document.querySelectorAll('.gemini-choice'))box.disabled=true;
  $('geminiMessage').textContent='Selected labels applied. Recheck the space roles and exclusions; measurements may change with classification. Boundaries and scale were preserved.';status('Gemini label suggestions applied for review');
 });
 action(loadGeminiStatus)();

@@ -102,3 +102,7 @@ No vision model can infer absolute metres reliably from a drawing that contains 
 ### Train a reviewed-drawing neural network
 
 See [the complete training workflow](docs/NEURAL_TRAINING.md). Windows users can run `TRAIN.bat path\to\manifest.json` to build a building-separated dataset and train a six-class U-Net. Activate it explicitly with `FLOORREVIEW_MODEL` in `.env.local`. Apartment grouping still uses the unit register; this network predicts space masks.
+
+### Whole-drawing Gemini analysis
+
+After configuring the key, select the image-sharing checkbox and use **Analyze all three phases with Gemini**. The response covers perimeter issues, room/exclusion roles, and occupancy/MEP labels for up to 60 supplied regions. **Download AI analysis JSON** combines current geometric measurements, unit candidates, scale evidence and separate AI suggestions. This is a bounded visual request, not ingestion of every page of a PDF. Apply selected suggestions to update classifications. No live Gemini verification is claimed without a user key.

@@ -93,3 +93,16 @@ def test_api_review_consent_apply_and_stale_state(monkeypatch,tmp_path):
     for field in ('footprint','metres_per_pixel','units','scale_confirmed','footprint_confirmed'):assert updated[field]==original[field]
     assert updated['reviewed'] is False
     assert client.post(base+'/gemini/apply',json={'review_id':report.json['review_id'],'region_ids':[1],'revision':updated['revision']},headers=headers).status_code==409
+
+
+def test_whole_drawing_three_phase_review(monkeypatch,tmp_path):
+    monkeypatch.setenv('GEMINI_API_KEY','test-only-key')
+    def request(req,timeout):
+        body=json.loads(req.data)
+        prompt=body['contents'][0]['parts'][0]['text']
+        assert 'all three phases' in prompt
+        assert 'Existing unit candidates' in prompt
+        return Response(answer())
+    monkeypatch.setattr('floorreview.gemini.urllib.request.urlopen',request)
+    report=GeminiReview(tmp_path).review(result(),image(),'all')
+    assert report['phase']=='all' and report['suggestions'][0]['occupancy']=='mep'

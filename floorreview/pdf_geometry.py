@@ -4,7 +4,7 @@ import re
 import numpy as np
 from shapely.geometry import Polygon
 from shapely.ops import unary_union
-from shapely.affinity import scale as scale_shape
+from shapely.affinity import affine_transform
 
 
 def filled_polygons(drawing):
@@ -92,7 +92,8 @@ def legend_geometry(page,width,height):
         minimum=max(e[3].get_area() for e in matching)*1.5
         for shape in filled_polygons(d):
             if shape.area<minimum:continue
-            shape=scale_shape(shape,xfact=sx,yfact=sy,origin=(0,0))
+            matrix=page.rotation_matrix
+            shape=affine_transform(shape,[matrix.a*sx,matrix.c*sx,matrix.b*sy,matrix.d*sy,matrix.e*sx,matrix.f*sy])
             supports.append(shape)
             if kind and (kind[0]!='room' or kind[1]=='mep') and not shape.interiors:
                 semantic.append({'name':label,'kind':kind[0],'occupancy':kind[1],'unit':'','polygon':[list(p) for p in shape.exterior.coords[:-1]],'geometry_source':'pdf_legend_vector','semantic_source':'pdf_legend_color','reviewed':False})
