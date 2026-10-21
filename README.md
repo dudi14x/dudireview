@@ -98,3 +98,7 @@ The physical scale is converted to the actual rendered image resolution, includi
 Detected room areas appear automatically when physical scale is resolved. A proposed exterior outline also yields a visibly approximate gross-floor estimate (`≈`); this does not certify boundary correctness or fill missed rooms. Checked measurements remain distinct in JSON/CSV, and room CSV now includes a separate `area_estimate_m2` column. Manual reference input is under **Advanced measurement override**, not the normal upload workflow.
 
 No vision model can infer absolute metres reliably from a drawing that contains no physical scale information. In that case the app reports **Scale unavailable**, explains the missing evidence and leaves distance/area unresolved rather than inventing a length. This version does not perform OCR-based calibration of scanned raster pages. Automatic scale detection does not repair inaccurate room boundaries or establish complete floor coverage.
+
+### Train a reviewed-drawing neural network
+
+See [the complete training workflow](docs/NEURAL_TRAINING.md). Windows users can run `TRAIN.bat path\to\manifest.json` to build a building-separated dataset and train a six-class U-Net. Activate it explicitly with `FLOORREVIEW_MODEL` in `.env.local`. Apartment grouping still uses the unit register; this network predicts space masks.

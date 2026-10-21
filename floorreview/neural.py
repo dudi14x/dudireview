@@ -54,14 +54,21 @@ def read_sample(path):
     return path.name,cv2.cvtColor(im,cv2.COLOR_BGR2RGB),mask
 
 
-def train_unet(data,output,epochs=12,source='annotated'):
+def train_unet(data,output,epochs=12,source='annotated',resume=None):
     torch.manual_seed(42);torch.set_num_threads(2)
     device='cuda' if torch.cuda.is_available() else 'cpu'
     training=sorted((Path(data)/'train/images').glob('*.png'));validation=sorted((Path(data)/'val/images').glob('*.png'))
     if not training or not validation:raise ValueError('Both train and val PNG image directories are required.')
     signatures={hashlib.sha256(read_sample(path)[1].tobytes()).hexdigest() for path in training}
     if any(hashlib.sha256(read_sample(path)[1].tobytes()).hexdigest() in signatures for path in validation):raise ValueError('Drawing leakage between training and validation.')
-    model=PlanUNet().to(device);optimizer=torch.optim.Adam(model.parameters(),lr=.002)
+    if epochs < 1:raise ValueError('Epochs must be positive.')
+    manifest=Path(data)/'manifest.json'
+    if manifest.exists():
+        buildings={}
+        for row in json.loads(manifest.read_text(encoding='utf-8')):
+            if row['building'] in buildings and buildings[row['building']]!=row['split']:raise ValueError('Building leakage between splits.')
+            buildings[row['building']]=row['split']
+    model=(load_model(resume)[0] if resume else PlanUNet()).to(device);optimizer=torch.optim.Adam(model.parameters(),lr=.002)
     present=np.zeros(6,dtype=np.int64)
     for path in training:
         _,_,mask=read_sample(path)
@@ -102,6 +109,6 @@ def train_unet(data,output,epochs=12,source='annotated'):
     return json.loads(output.with_suffix('.metrics.json').read_text(encoding='utf-8'))
 
 if __name__=='__main__':
-    parser=argparse.ArgumentParser();parser.add_argument('--data',required=True);parser.add_argument('--output',default='models/plan-unet.pt');parser.add_argument('--epochs',type=int,default=12);parser.add_argument('--synthetic',action='store_true');args=parser.parse_args()
+    parser=argparse.ArgumentParser();parser.add_argument('--data',required=True);parser.add_argument('--output',default='models/plan-unet.pt');parser.add_argument('--epochs',type=int,default=12);parser.add_argument('--synthetic',action='store_true');parser.add_argument('--resume',help='Trusted local PlanUNet checkpoint to fine-tune');args=parser.parse_args()
     if args.synthetic:synthetic(args.data,n=96)
-    print(json.dumps(train_unet(args.data,args.output,args.epochs,'synthetic' if args.synthetic else 'annotated'),indent=2))
+    print(json.dumps(train_unet(args.data,args.output,args.epochs,'synthetic' if args.synthetic else 'annotated',resume=args.resume),indent=2))
