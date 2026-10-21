@@ -3,7 +3,7 @@ let currentPhase='floor',phaseProject=null,geminiSettings=null,activeGeminiRevie
 window.frCurrentPhase=currentPhase;
 const phaseOrder=['floor','rooms','occupancy'];
 const phaseText={
- floor:{title:'Phase 1 · Total floor area',description:'Check the exterior boundary and calibrate a known distance. Gross area includes the entire confirmed floor perimeter; a detector proposal is not a checked measurement.'},
+ floor:{title:'Phase 1 · Total floor area',description:'The system detects scale references and traces a proposed floor outline after upload. Distances and area estimates appear automatically when evidence is available. Inspect the outline; geometric completeness is not guaranteed.'},
  rooms:{title:'Phase 2 · Individual rooms and exclusions',description:'Review each detected room. Identify stairs, corridors, walls and voids to exclude from room interiors. The detected-room total does not include missed rooms.'},
  occupancy:{title:'Phase 3 · Occupancy, residential units and MEP',description:'Classify the detected spaces, review the residential-unit register, and locate service areas. A bedroom detection is not an apartment; unclassified spaces remain unknown.'}
 };
@@ -17,7 +17,7 @@ function refreshPhase(){
  for(const node of document.querySelectorAll('[data-phases]'))node.hidden=!node.dataset.phases.split(' ').includes(currentPhase);
  $('phasePrevious').disabled=currentPhase==='floor';$('phaseNext').disabled=currentPhase==='occupancy';
  let summary='';
- if(currentPhase==='floor')summary=`Scale: ${analysis.measurement_status.scale_confirmed?'checked':'needs calibration'} · Exterior boundary: ${analysis.measurement_status.boundary_confirmed?'checked':'needs review'} · Area: ${value(analysis.gross_floor_area_m2)} m²`;
+ if(currentPhase==='floor')summary=`Scale: ${project.scale_source==='user_calibration'?'manual override':project.scale_detection?.status==='resolved'?'automatically derived':analysis.measurement_status.scale_confirmed?'checked':project.metres_per_pixel?'declared scale estimate':'not detected'} · Exterior boundary: ${analysis.measurement_status.boundary_confirmed?'checked':'automatic outline estimate'} · Area: ${analysis.gross_floor_area_m2!=null?value(analysis.gross_floor_area_m2):analysis.estimates?.gross_floor_area_m2!=null?'≈ '+value(analysis.estimates.gross_floor_area_m2):'not available'} m² · ${project.scale_detection?.message||''}`;
  if(currentPhase==='rooms')summary=`${analysis.rooms.length} detected interiors · ${project.regions.filter(r=>r.kind!=='room').length} exclusion zones · Detected net area: ${value(analysis.net_room_area_m2)} m²`;
  if(currentPhase==='occupancy')summary=`${project.regions.filter(r=>r.occupancy==='unclassified').length} unclassified zones · ${analysis.mep_space_count||'No'} MEP candidates identified · ${project.units?.length||0} candidate units`;
  $('phaseSummary').textContent=summary;
@@ -37,7 +37,7 @@ $('phasePrevious').onclick=()=>setPhase(phaseOrder[phaseOrder.indexOf(currentPha
 $('phaseNext').onclick=()=>setPhase(phaseOrder[phaseOrder.indexOf(currentPhase)+1]);
 const renderBeforePhases=render;
 render=function(){
- const changed=project.id!==phaseProject;renderBeforePhases();
+ const changed=project.id!==phaseProject;renderBeforePhases();if(changed)$('distanceResult').textContent='';
  if(changed){phaseProject=project.id;setPhase('floor');}else refreshPhase();
 };
 async function loadGeminiStatus(){

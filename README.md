@@ -21,7 +21,7 @@ The server listens on port 8765, loopback by default. Use your hosting platform'
 
 1. Select one or multiple PDF/PNG/JPEG files. The durable queue admits up to 1,000 pending drawings, two processing workers, 32 MiB per upload. Select a PDF page (one selected page per document per submission). CAD formats require PDF export.
 2. Open a finished result. View room polygon proposals over the plan, candidate 1/2/3-bed mix, MEP count, room schedule and occupancy totals.
-3. Calibrate using two image points and a known real distance in metres. A unique printed PDF `1:N` ratio supplies a suggested scale, but metric measurements remain pending until you calibrate or explicitly confirm it. Raster images require calibration. Do not infer scale from a page's pixel width alone.
+3. Physical scale is detected automatically from matched dimension lines or a graphic scale bar with units. A printed ratio alone supplies an explicit estimate. Use **Measure distance** to select two points and receive their computed separation; no typed reference length is needed when scale detection succeeds. Raster-only images without a usable reference remain unresolved. Manual calibration is an optional advanced override.
 4. Review the proposed floor outline and room polygons. The outline now comes from closed dark linework, never a connect-the-dots envelope of room detections. Check **Exterior boundary checked against the drawing**, or trace the perimeter yourself, before a gross floor measurement is reported. Trace/edit them when needed. Assign stairs, corridors, walls and voids as excluded regions. Assign residential / MEP / commercial / common occupancy and apartment unit IDs. Candidate unit markers do not establish unit boundaries or assign rooms to apartments automatically.
 5. Correct the unit register, mark review complete, save, and download JSON/CSV or reviewed training labels.
 
@@ -68,7 +68,7 @@ Accuracy and dataset planning: [docs/DATASET_PLAN.md](docs/DATASET_PLAN.md). Upd
 
 The result cards are keyboard-accessible tabs:
 
-1. **Total floor area** opens the perimeter/calibration tools and gross-area checks. Room overlays are hidden to keep the boundary visible.
+1. **Total floor area** shows automatic scale evidence, floor-area estimates and distance measurement tools. Room overlays are hidden to keep the boundary visible.
 2. **Individual rooms and exclusions** opens the room schedule, boundaries, and stairs/corridor/wall/void roles.
 3. **Occupancy, residential units and MEP** opens occupancy labels, unit register, MEP-only highlighting, and locate controls.
 
@@ -87,3 +87,14 @@ Default model: `gemini-2.5-flash`. Set `GEMINI_MODEL` to an image-capable model 
 Only an annotated image overview and up to eight detail crops leave the server; the original PDF, API key and printed area totals are not sent as text. Up to 60 detected region IDs are considered in one review. Responses are validated and cached by model, phase, image and drawing state. Cache hits do not consume the local cap. A changed drawing invalidates old suggestions. Local processing remains usable without a key, network access or quota.
 
 The API key stays server-side; `.env.local` is ignored by Git. Do not share that file. To use Gemini in the cloud environment, enter the key through environment settings instead of a local file. Live Gemini behavior is unverified until a valid key is provided; automated tests simulate provider responses, missing keys, quota errors, caching, stale results and invalid model output. No real API request is made by the test suite.
+
+
+## Automatic distances and scale
+
+PDF uploads now inspect geometric references automatically. A graphic scale bar needs at least three consistent numeric tick labels and a nearby unit. Dimension-based detection needs at least three consistent long dimension-line matches and two distinct values, with explicit units/unit notes or a cross-check against a declared scale. Conflicting bars, multiple declared viewport scales and materially competing dimension groups are rejected. A printed scale ratio alone remains an estimate because resized sheets can invalidate it.
+
+The physical scale is converted to the actual rendered image resolution, including rotated PDFs. Matched reference evidence and the method are stored in `scale_detection`. The original PDF is retained privately in the local data folder for rerunning **Detect scale automatically**. Older results without the original PDF must be re-uploaded to use this feature. Original PDFs are not sent to Gemini.
+
+Detected room areas appear automatically when physical scale is resolved. A proposed exterior outline also yields a visibly approximate gross-floor estimate (`≈`); this does not certify boundary correctness or fill missed rooms. Checked measurements remain distinct in JSON/CSV, and room CSV now includes a separate `area_estimate_m2` column. Manual reference input is under **Advanced measurement override**, not the normal upload workflow.
+
+No vision model can infer absolute metres reliably from a drawing that contains no physical scale information. In that case the app reports **Scale unavailable**, explains the missing evidence and leaves distance/area unresolved rather than inventing a length. This version does not perform OCR-based calibration of scanned raster pages. Automatic scale detection does not repair inaccurate room boundaries or establish complete floor coverage.

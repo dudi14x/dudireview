@@ -47,15 +47,15 @@ def calculate(result):
     overlap = sum(s.area for _, s in rooms) - total.area
     warnings = []
     if scale is None:
-        warnings.append('Set a measured reference distance to obtain square metres.')
+        warnings.append(result.get('scale_detection',{}).get('message','No usable physical scale reference was found in the drawing.'))
     if scale is not None and not scale_confirmed:
-        warnings.append('Confirm the scale against a known dimension before metric measurements are reported.')
+        warnings.append('The declared scale could not be cross-checked; displayed values are estimates.')
     if result.get('scale_source')=='printed_ratio_unverified' and not scale_confirmed:
         warnings.append('Areas are estimates from the printed PDF ratio. Verify against a known dimension; resized sheets and multiple viewports can invalidate this scale.')
     if proposed_footprint is not None and not boundary_confirmed:
         warnings.append('Gross area uses a proposed outline, which may omit exterior walls, balconies or disconnected wings. Confirm the entire exterior boundary before using the area.')
     if not boundary_confirmed:
-        warnings.append('Trace or explicitly confirm the exterior floor boundary to calculate gross floor area. A shape inferred from rooms is not a measured floor perimeter.')
+        warnings.append('The detected exterior outline is an automatic estimate, not a checked gross floor measurement.')
     if footprint is not None and any(s.is_empty for _,s in shapes):
         warnings.append('Some regions lie outside the confirmed floor boundary and have zero measured area.')
     if overlap > 0.01:
@@ -84,6 +84,6 @@ def calculate(result):
         'net_room_area_m2': area(total),
         'excluded_area_m2': area(exclusions),
         'unallocated_area_m2': area(footprint.difference(unary_union([total, exclusions]))) if footprint is not None else None,
-        'rooms': [{'id': r['id'], 'name': r['name'], 'occupancy': r['occupancy'], 'unit': r.get('unit', ''), 'area_m2': area(s), 'area_pixels': round(s.area, 2)} for r, s in rooms],
+        'rooms': [{'id': r['id'], 'name': r['name'], 'occupancy': r['occupancy'], 'unit': r.get('unit', ''), 'area_m2': area(s), 'area_estimate_m2':estimate(s), 'area_pixels': round(s.area, 2)} for r, s in rooms],
         'groups': groups, 'warnings': warnings,
     }

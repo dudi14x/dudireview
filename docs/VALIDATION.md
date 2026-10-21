@@ -53,3 +53,12 @@ Chromium checks passed for pending-scale guidance, four MEP locate buttons and p
 26 backend tests passed after adding optional Gemini review, including missing keys, zero/daily budget limits, request/image structure, cache hits, sanitized quota errors without retries, unknown region IDs, extra geometry/area fields, invalid confidence, explicit consent, selected label application and stale drawing rejection. Dependency checks passed.
 
 Chromium desktop and 390-pixel mobile checks passed for all three phase tabs, keyboard navigation, phase-specific overlays and controls, a simulated provider review, suggestion selection and application. No JavaScript errors were observed. These checks used fake provider replies; no actual Google API call or billing test was performed because no Gemini key was configured. They do not establish Gemini accuracy, model availability, free-tier eligibility, or improved detector geometry.
+
+
+## Automatic scale and distance workflow
+
+33 tests passed after adding automatic scale-bar/tick matching, unit-aware dimension-line consistency checks, multiple-scale/conflict rejection, resolution/rotation invariance, and upload/rerun integration. Graphic bars need three aligned values with units; dimension calibration needs three consistent long baselines with at least two distinct annotated values. Duplicate overprinted references are not counted twice. A declared ratio alone remains an estimate.
+
+Both supplied PDFs resolved physical scale without a user-entered reference: the tower concept via its metre scale bar, and the engineering sheet via 26 consistent dimension references and its millimetre note. This is reference-based calibration, not physical-size inference by the neural network. It does not establish room or floor-boundary accuracy.
+
+Chromium checks passed for automatic floor/room area display, selecting two points to receive a distance without a text-input dialog, advanced-only manual override, rerun detection and 390-pixel mobile layout. No JavaScript errors occurred. The tower sample displayed an automatic outline estimate of approximately 1,781 m². It remains a boundary estimate, not a certified measurement. The newly screenshotted R2 source PDF was not available for a direct test.

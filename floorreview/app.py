@@ -16,8 +16,9 @@ from flask import Flask, abort, jsonify, request, send_file
 from dotenv import load_dotenv
 from .gemini import GeminiReview, GeminiError, fingerprint
 from .geometry import calculate, polygon
-from .vision import proposals, footprint_proposal, room_envelope
-from .semantics import pdf_evidence, scale_from_pdf
+from .vision import proposals, footprint_proposal
+from .semantics import pdf_evidence
+from .auto_scale import auto_scale
 from .pdf_geometry import legend_geometry, apply_legend
 
 ROOT = Path(__file__).resolve().parent
@@ -117,6 +118,7 @@ def create_app(data_dir=None):
         removed_regions = 0
         units = []
         inferred_scale = None
+        scale_detection={'status':'unavailable','source':'missing','automatic':False,'metres_per_pixel':None,'evidence':[],'message':'This raster image has no embedded vector scale references. Automatic physical scale cannot be established from its pixels alone.'}
         if suffix == '.pdf':
             with fitz.open(stream=raw, filetype='pdf') as doc:
                 supports, semantic = legend_geometry(doc[page_number-1],image.width,image.height)
@@ -133,10 +135,12 @@ def create_app(data_dir=None):
                     candidate['id']=max([r['id'] for r in regions],default=0)+1
                     candidate['geometry_source']='enclosed_lines_with_pdf_label'
                     regions.append(candidate)
-                inferred_scale = scale_from_pdf(doc[page_number-1],image.width)
-        result = {'id': uuid.uuid4().hex, 'name': Path(uploaded.filename.replace('\\','/')).name, 'page':page_number, 'width':image.width, 'height':image.height, 'metres_per_pixel':inferred_scale, 'scale_source':'printed_ratio_unverified' if inferred_scale else 'missing', 'footprint':footprint, 'footprint_source':'ink_outline_proposal', 'scale_confirmed':False, 'footprint_confirmed':False, 'filtered_regions':removed_regions, 'units':units, 'regions':regions, 'model_source':source, 'reviewed':False, 'revision':1}
+                scale_detection=auto_scale(doc[page_number-1],image.width)
+                inferred_scale=scale_detection['metres_per_pixel']
+        result = {'id': uuid.uuid4().hex, 'name': Path(uploaded.filename.replace('\\','/')).name, 'page':page_number, 'width':image.width, 'height':image.height, 'metres_per_pixel':inferred_scale, 'scale_source':scale_detection['source'], 'scale_detection':scale_detection, 'footprint':footprint, 'footprint_source':'ink_outline_proposal', 'scale_confirmed':scale_detection['automatic'], 'footprint_confirmed':False, 'filtered_regions':removed_regions, 'units':units, 'regions':regions, 'model_source':source, 'reviewed':False, 'revision':1}
         folder = data/result['id']; folder.mkdir()
         image.save(folder/'drawing.png')
+        if suffix=='.pdf':(folder/'source.pdf').write_bytes(raw)
         result['analysis'] = calculate(result)
         save(folder, result)
         return jsonify(result), 201
@@ -189,11 +193,11 @@ def create_app(data_dir=None):
         with zipfile.ZipFile(out,'w',zipfile.ZIP_DEFLATED) as archive:
             archive.writestr('analysis.json', json.dumps(result,indent=2))
             csvout = io.StringIO()
-            writer = csv.DictWriter(csvout,fieldnames=['id','name','occupancy','unit','area_m2','area_pixels'])
+            writer = csv.DictWriter(csvout,fieldnames=['id','name','occupancy','unit','area_m2','area_estimate_m2','area_pixels'])
             writer.writeheader(); writer.writerows(result['analysis']['rooms'])
             archive.writestr('rooms.csv', csvout.getvalue())
             archive.write(directory(ident)/'drawing.png','drawing.png')
-            archive.writestr('README.txt','Areas use the user-calibrated scale. Gross area is the traced outer boundary; net area is room union minus exclusions. Unknown residual is not automatically walls. Predictions and classifications require review. See analysis.json for provenance and warnings.')
+            archive.writestr('README.txt','Areas use the recorded automatic scale references or a manual override. Estimates are separate from checked measurements. Gross area is the traced outer boundary; net area is room union minus exclusions. Unknown residual is not automatically walls. Predictions and classifications require review. See analysis.json for provenance and warnings.')
         out.seek(0)
         return send_file(out,mimetype='application/zip',as_attachment=True,download_name='floorreview-results.zip')
 
@@ -216,6 +220,30 @@ def create_app(data_dir=None):
             archive.writestr('annotation.json',json.dumps(result))
         out.seek(0)
         return send_file(out,mimetype='application/zip',as_attachment=True,download_name='floorreview-labels.zip')
+    @app.post('/api/projects/<ident>/auto-scale')
+    def automatic_scale(ident):
+        body=request.get_json(silent=True) or {}
+        if not isinstance(body,dict):raise ValueError('Expected a JSON object.')
+        with LOCK:
+            result=read(ident)
+            if body.get('revision')!=result['revision']:
+                return jsonify(error='Reload this drawing before automatic scale detection.'),409
+            path=directory(ident)/'source.pdf'
+            if not path.exists():raise ValueError('Re-upload the original dimensioned PDF to run automatic scale detection. This older result only retained a rendered image.')
+            original=path.read_bytes()
+        with fitz.open(stream=original,filetype='pdf') as doc:
+            detection=auto_scale(doc[result['page']-1],result['width'])
+        with LOCK:
+            current=read(ident)
+            if current['revision']!=result['revision']:
+                return jsonify(error='The drawing changed during scale detection. Reload and try again.'),409
+            if current.get('scale_source')=='user_calibration':
+                return jsonify(error='A manual override is active. Re-upload to analyze the PDF without replacing your saved manual measurement.'),409
+            current.update(metres_per_pixel=detection['metres_per_pixel'],scale_source=detection['source'],scale_detection=detection,scale_confirmed=detection['automatic'])
+            current['analysis']=calculate(current);current['revision']+=1
+            save(directory(ident),current)
+        return jsonify(current)
+
     @app.get('/api/gemini/status')
     def gemini_status():
         return jsonify(gemini.status())
