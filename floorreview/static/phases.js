@@ -2,6 +2,17 @@
 let currentPhase='floor',phaseProject=null,geminiSettings=null,activeGeminiReview=null;
 window.frCurrentPhase=currentPhase;
 const phaseOrder=['floor','rooms','occupancy'];
+const phaseReviews=new Map();
+const phaseGeminiText={floor:'Analyze floor boundary and scale issues with Gemini',rooms:'Analyze rooms and exclusions with Gemini',occupancy:'Analyze occupancies and MEP with Gemini'};
+// Keep the provider controls and findings inside the selected phase.
+$('phasePanel').append(document.querySelector('.gemini-panel'));
+function phaseReviewKey(phase=currentPhase){return `${project.id}:${project.revision}:${phase}`;}
+function restorePhaseReview(){
+ const review=phaseReviews.get(phaseReviewKey());
+ activeGeminiReview=null;$('geminiOutput').replaceChildren();$('geminiDownload').disabled=true;$('geminiApply').disabled=true;$('geminiMessage').textContent='';
+ if(review)showGemini(review);
+}
+
 const phaseText={
  floor:{title:'Phase 1 · Total floor area',description:'The system detects scale references and traces a proposed floor outline after upload. Distances and area estimates appear automatically when evidence is available. Inspect the outline; geometric completeness is not guaranteed.'},
  rooms:{title:'Phase 2 · Individual rooms and exclusions',description:'Review each detected room. Identify stairs, corridors, walls and voids to exclude from room interiors. The detected-room total does not include missed rooms.'},
@@ -21,13 +32,15 @@ function refreshPhase(){
  if(currentPhase==='rooms')summary=`${analysis.rooms.length} detected interiors · ${project.regions.filter(r=>r.kind!=='room').length} exclusion zones · Detected net area: ${value(analysis.net_room_area_m2)} m²`;
  if(currentPhase==='occupancy')summary=`${project.regions.filter(r=>r.occupancy==='unclassified').length} unclassified zones · ${analysis.mep_space_count||'No'} MEP candidates identified · ${project.units?.length||0} candidate units`;
  $('phaseSummary').textContent=summary;
+ $('geminiHeading').textContent=`Gemini · Phase ${phaseOrder.indexOf(currentPhase)+1}`;
+ $('geminiReview').textContent=phaseGeminiText[currentPhase];
  $('geminiScope').textContent=`Gemini will visually review ${description.title.toLowerCase()}. It can flag problems and suggest labels for existing zones; it cannot fix missing geometry or confirm an area.`;
  draw();
 }
 function setPhase(phase){
  if(!phaseOrder.includes(phase))return;
  currentPhase=phase;window.frCurrentPhase=phase;mepOnly=false;$('showMep').textContent='Show MEP only';points=[];mode='select';
- activeGeminiReview=null;$('geminiDownload').disabled=true;$('geminiOutput').replaceChildren();$('geminiApply').disabled=true;$('geminiMessage').textContent='';refreshPhase();
+ activeGeminiReview=null;$('geminiDownload').disabled=true;$('geminiOutput').replaceChildren();$('geminiApply').disabled=true;$('geminiMessage').textContent='';refreshPhase();restorePhaseReview();
 }
 for(const button of document.querySelectorAll('[data-phase]')){
  button.onclick=()=>setPhase(button.dataset.phase);
@@ -38,7 +51,7 @@ $('phaseNext').onclick=()=>setPhase(phaseOrder[phaseOrder.indexOf(currentPhase)+
 const renderBeforePhases=render;
 render=function(){
  const changed=project.id!==phaseProject;renderBeforePhases();if(changed)$('distanceResult').textContent='';
- if(changed){phaseProject=project.id;setPhase('floor');}else refreshPhase();
+ if(changed){phaseProject=project.id;setPhase('floor');}else{refreshPhase();if(activeGeminiReview&&activeGeminiReview.input_revision!==project.revision)restorePhaseReview();}
 };
 async function loadGeminiStatus(){
  geminiSettings=await api('/api/gemini/status');
@@ -69,6 +82,7 @@ async function requestGemini(allPhases=false){
  try{
   const review=await api(`/api/projects/${id}/gemini`,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({phase,revision,consent:true})});
   if(project.id!==id||(!allPhases&&currentPhase!==phase)||project.revision!==revision||dirty){status('Gemini review finished for an earlier drawing state. Reload or request review again.');return;}
+  if(!allPhases)phaseReviews.set(phaseReviewKey(phase),review);
   showGemini(review);$('geminiMessage').textContent='Suggestions are separate from your analysis. Select labels to apply; geometry and calibration stay unchanged.';
  }catch(error){$('geminiMessage').textContent=error.message;throw error}
  finally{$('geminiReview').disabled=false;$('geminiAll').disabled=false;await loadGeminiStatus();}
