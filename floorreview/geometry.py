@@ -46,6 +46,8 @@ def calculate(result):
     total = unary_union([s for _, s in rooms])
     overlap = sum(s.area for _, s in rooms) - total.area
     warnings = []
+    if result.get('rejected_predictions'):
+        warnings.append(f"{len(result['rejected_predictions'])} unsupported predictions were excluded from room counts and areas. Inspect flagged predictions; faint genuine rooms may also be flagged.")
     if scale is None:
         warnings.append(result.get('scale_detection',{}).get('message','No usable physical scale reference was found in the drawing.'))
     if scale is not None and not scale_confirmed:

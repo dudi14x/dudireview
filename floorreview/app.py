@@ -17,6 +17,7 @@ from dotenv import load_dotenv
 from .gemini import GeminiReview, GeminiError, fingerprint
 from .geometry import calculate, polygon
 from .vision import proposals, footprint_proposal
+from .detection_quality import screen_predictions
 from .semantics import pdf_evidence
 from .auto_scale import auto_scale
 from .pdf_geometry import legend_geometry, apply_legend
@@ -137,7 +138,8 @@ def create_app(data_dir=None):
                     regions.append(candidate)
                 scale_detection=auto_scale(doc[page_number-1],image.width)
                 inferred_scale=scale_detection['metres_per_pixel']
-        result = {'id': uuid.uuid4().hex, 'name': Path(uploaded.filename.replace('\\','/')).name, 'page':page_number, 'width':image.width, 'height':image.height, 'metres_per_pixel':inferred_scale, 'scale_source':scale_detection['source'], 'scale_detection':scale_detection, 'footprint':footprint, 'footprint_source':'ink_outline_proposal', 'scale_confirmed':scale_detection['automatic'], 'footprint_confirmed':False, 'filtered_regions':removed_regions, 'units':units, 'regions':regions, 'model_source':source, 'reviewed':False, 'revision':1}
+        regions, rejected_predictions = screen_predictions(np.array(image), regions)
+        result = {'rejected_predictions':rejected_predictions, 'id': uuid.uuid4().hex, 'name': Path(uploaded.filename.replace('\\','/')).name, 'page':page_number, 'width':image.width, 'height':image.height, 'metres_per_pixel':inferred_scale, 'scale_source':scale_detection['source'], 'scale_detection':scale_detection, 'footprint':footprint, 'footprint_source':'ink_outline_proposal', 'scale_confirmed':scale_detection['automatic'], 'footprint_confirmed':False, 'filtered_regions':removed_regions, 'units':units, 'regions':regions, 'model_source':source, 'reviewed':False, 'revision':1}
         folder = data/result['id']; folder.mkdir()
         image.save(folder/'drawing.png')
         if suffix=='.pdf':(folder/'source.pdf').write_bytes(raw)
@@ -147,6 +149,42 @@ def create_app(data_dir=None):
 
     @app.get('/api/projects/<ident>')
     def detail(ident): return jsonify(read(ident))
+
+    @app.post('/api/projects/<ident>/screen-predictions')
+    def screen_existing(ident):
+        body=request.get_json(silent=True) or {}
+        with LOCK:
+            result=read(ident)
+            if body.get('revision')!=result['revision']:
+                return jsonify(error='Drawing changed. Reload before screening.'),409
+            if result.get('reviewed'):
+                raise ValueError('Reviewed drawings are preserved. Screen an unreviewed analysis instead.')
+            image=np.array(Image.open(directory(ident)/'drawing.png').convert('RGB'))
+            result['regions'],rejected=screen_predictions(image,result['regions'])
+            result.setdefault('rejected_predictions',[]).extend(rejected)
+            result['analysis']=calculate(result);result['revision']+=1
+            save(directory(ident),result)
+        return jsonify(result)
+
+    @app.post('/api/projects/<ident>/restore-prediction')
+    def restore_prediction(ident):
+        body=request.get_json(silent=True) or {}
+        with LOCK:
+            result=read(ident)
+            if body.get('revision')!=result['revision']:
+                return jsonify(error='Drawing changed. Reload before restoring.'),409
+            candidates=result.get('rejected_predictions',[])
+            region=next((r for r in candidates if r['id']==body.get('region_id')),None)
+            if region is None:raise ValueError('Flagged prediction not found.')
+            if len(result['regions'])>=1000:raise ValueError('Maximum 1000 regions.')
+            candidates.remove(region)
+            region['id']=max([r['id'] for r in result['regions']]+[r['id'] for r in candidates],default=0)+1
+            region['semantic_source']='user_restored_prediction'
+            region.pop('rejection_reason',None)
+            result['regions'].append(region);result['reviewed']=False
+            result['analysis']=calculate(result);result['revision']+=1
+            save(directory(ident),result)
+        return jsonify(result)
 
     @app.get('/api/projects/<ident>/image')
     def drawing(ident): return send_file(directory(ident)/'drawing.png')

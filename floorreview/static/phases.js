@@ -32,6 +32,20 @@ function refreshPhase(){
  if(currentPhase==='rooms')summary=`${analysis.rooms.length} detected interiors · ${project.regions.filter(r=>r.kind!=='room').length} exclusion zones · Detected net area: ${value(analysis.net_room_area_m2)} m²`;
  if(currentPhase==='occupancy')summary=`${project.regions.filter(r=>r.occupancy==='unclassified').length} unclassified zones · ${analysis.mep_space_count||'No'} MEP candidates identified · ${project.units?.length||0} candidate units`;
  $('phaseSummary').textContent=summary;
+ const rejected=project.rejected_predictions||[];
+ $('flaggedSummary').textContent=`${rejected.length} unsupported predictions excluded`;
+ $('flaggedPredictions').hidden=!rejected.length;
+ $('flaggedRows').replaceChildren();
+ for(const region of rejected){
+  const row=document.createElement('div');row.className='actions';
+  const text=document.createElement('span');text.textContent=`${region.name}: ${region.rejection_reason}`;
+  const locate=document.createElement('button');locate.className='secondary';locate.textContent='Inspect outline';
+  locate.onclick=()=>{draw();$('canvas').append(element('polygon',{points:region.polygon.map(p=>p.join(',')).join(' '),fill:'#ce536b','fill-opacity':.15,stroke:'#ce536b','stroke-width':3,'stroke-dasharray':'6 4'}));$('canvas').scrollIntoView({behavior:'smooth'});};
+  const restore=document.createElement('button');restore.textContent='Restore space';
+  restore.onclick=action(async()=>{if(dirty)throw Error('Save edits first.');project=await api(`/api/projects/${project.id}/restore-prediction`,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({revision:project.revision,region_id:region.id})});render();});
+  row.append(text,locate,restore);$('flaggedRows').append(row);
+ }
+
  $('geminiHeading').textContent=`Gemini · Phase ${phaseOrder.indexOf(currentPhase)+1}`;
  $('geminiReview').textContent=phaseGeminiText[currentPhase];
  $('geminiScope').textContent=`Gemini will visually review ${description.title.toLowerCase()}. It can flag problems and suggest labels for existing zones; it cannot fix missing geometry or confirm an area.`;
@@ -104,3 +118,9 @@ $('geminiApply').onclick=action(async()=>{
  $('geminiMessage').textContent='Selected labels applied. Recheck the space roles and exclusions; measurements may change with classification. Boundaries and scale were preserved.';status('Gemini label suggestions applied for review');
 });
 action(loadGeminiStatus)();
+
+$('screenPredictions').onclick=action(async()=>{
+ if(dirty)throw Error('Save edits before checking predictions.');
+ $('screenPredictions').disabled=true;
+ try{project=await api(`/api/projects/${project.id}/screen-predictions`,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({revision:project.revision})});render();status(`${project.rejected_predictions?.length||0} unsupported predictions flagged. Review the flagged list; remaining detections may still contain errors.`);}finally{$('screenPredictions').disabled=false;}
+});
