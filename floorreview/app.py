@@ -13,6 +13,8 @@ import fitz
 import numpy as np
 from PIL import Image, UnidentifiedImageError
 from flask import Flask, abort, jsonify, request, send_file
+from dotenv import load_dotenv
+from .gemini import GeminiReview, GeminiError, fingerprint
 from .geometry import calculate, polygon
 from .vision import proposals, footprint_proposal, room_envelope
 from .semantics import pdf_evidence, scale_from_pdf
@@ -22,11 +24,14 @@ ROOT = Path(__file__).resolve().parent
 LOCK = threading.RLock()
 
 def create_app(data_dir=None):
+    if data_dir is None:
+        load_dotenv(ROOT.parent/'.env.local',override=False,encoding='utf-8')
     app = Flask(__name__, static_folder='static')
     data = Path(data_dir or os.environ.get('FLOORREVIEW_DATA', ROOT.parent/'data'))
     data.mkdir(parents=True, exist_ok=True)
     app.config.update(MAX_CONTENT_LENGTH=32*1024*1024)
     token = secrets.token_urlsafe(32)
+    gemini = GeminiReview(data)
     model = Path(os.environ.get('FLOORREVIEW_MODEL', ROOT.parent/'models/archvision-rooms.pt'))
 
     @app.before_request
@@ -37,6 +42,10 @@ def create_app(data_dir=None):
     @app.errorhandler(ValueError)
     def invalid(exc):
         return jsonify(error=str(exc)), 400
+
+    @app.errorhandler(GeminiError)
+    def gemini_error(exc):
+        return jsonify(error=str(exc)),exc.status
 
     @app.errorhandler(413)
     def too_large(exc):
@@ -207,6 +216,57 @@ def create_app(data_dir=None):
             archive.writestr('annotation.json',json.dumps(result))
         out.seek(0)
         return send_file(out,mimetype='application/zip',as_attachment=True,download_name='floorreview-labels.zip')
+    @app.get('/api/gemini/status')
+    def gemini_status():
+        return jsonify(gemini.status())
+
+    @app.post('/api/projects/<ident>/gemini')
+    def gemini_review(ident):
+        body=request.get_json(silent=True) or {}
+        if not isinstance(body,dict) or body.get('consent') is not True:
+            raise ValueError('Confirm that you want to send this drawing image to Google Gemini.')
+        with LOCK:
+            result=read(ident)
+            if body.get('revision')!=result['revision']:
+                return jsonify(error='Save or reload the drawing before requesting Gemini review.'),409
+            image=(directory(ident)/'drawing.png').read_bytes()
+        review=gemini.review(result,image,body.get('phase','occupancy'))
+        return jsonify(review)
+
+    @app.post('/api/projects/<ident>/gemini/apply')
+    def gemini_apply(ident):
+        body=request.get_json(silent=True) or {}
+        if not isinstance(body,dict):raise ValueError('Expected a JSON object.')
+        key=body.get('review_id')
+        if not isinstance(key,str) or len(key)!=64:raise ValueError('Invalid review identifier.')
+        review=gemini.cached(key)
+        if not review:raise ValueError('Review was not found. Run a Gemini review first.')
+        selected=body.get('region_ids')
+        if not isinstance(selected,list) or not selected or any(type(i) is not int for i in selected) or len(set(selected))!=len(selected):
+            raise ValueError('Select one or more distinct suggestions to apply.')
+        suggestions={r['id']:r for r in review['suggestions']}
+        if any(i not in suggestions for i in selected):raise ValueError('Selected suggestion was not found.')
+        with LOCK:
+            result=read(ident)
+            if body.get('revision')!=result['revision']:
+                return jsonify(error='The drawing changed. Reload before applying suggestions.'),409
+            image=(directory(ident)/'drawing.png').read_bytes()
+            if fingerprint(result,image,review['phase'],review['model'])!=key:
+                return jsonify(error='These suggestions describe an older drawing state. Request a new review.'),409
+            for region in result['regions']:
+                if region['id'] not in selected:continue
+                suggestion=suggestions[region['id']]
+                for field in ('name','kind','occupancy'):region[field]=suggestion[field]
+                region['semantic_source']='gemini_suggestion'
+                region['gemini_confidence']=suggestion['confidence']
+                region['reviewed']=False
+            result['reviewed']=False
+            result['gemini_last_review']={'review_id':key,'model':review['model'],'phase':review['phase'],'applied_ids':selected}
+            result['analysis']=calculate(result)
+            result['revision']+=1
+            save(directory(ident),result)
+        return jsonify(result)
+
     from .batch import register_queue
     register_queue(app, data, upload)
     return app

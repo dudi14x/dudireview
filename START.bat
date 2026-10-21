@@ -18,6 +18,7 @@ if errorlevel 1 goto failed
 if errorlevel 1 goto failed
 .venv-win\Scripts\python.exe -m pip check
 if errorlevel 1 goto failed
+if not exist .env.local if exist .env.example copy /Y .env.example .env.local >nul
 set YOLO_CONFIG_DIR=%CD%\data\yolo
 echo Open http://localhost:8765 in your browser after the server starts.
 .venv-win\Scripts\python.exe -m floorreview.app

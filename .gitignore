@@ -6,3 +6,5 @@ models/
 *.egg-info/
 
 .venv-win/
+.env.local
+.env

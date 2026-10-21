@@ -62,3 +62,28 @@ Model weights, private drawings, training datasets, output results and the virtu
 If setup reports no compatible Python, install the **Windows installer (64-bit)** from https://www.python.org/downloads/release/python-31210/ and enable the launcher. Then run `START.bat` again. You do not need to uninstall newer Python versions. On Windows the environment is `.venv-win`; run tests with `.venv-win\Scripts\python.exe -m pytest -q`.
 
 Accuracy and dataset planning: [docs/DATASET_PLAN.md](docs/DATASET_PLAN.md). Updates to geometry processing require re-uploading an old drawing to run detection again; opening old results only refreshes their measurement-status calculations.
+
+
+## Three clickable phases
+
+The result cards are keyboard-accessible tabs:
+
+1. **Total floor area** opens the perimeter/calibration tools and gross-area checks. Room overlays are hidden to keep the boundary visible.
+2. **Individual rooms and exclusions** opens the room schedule, boundaries, and stairs/corridor/wall/void roles.
+3. **Occupancy, residential units and MEP** opens occupancy labels, unit register, MEP-only highlighting, and locate controls.
+
+The trained local vision model runs after upload. Phase switching uses the saved analysis and does not re-upload or call an API. Gemini is an optional visual second opinion, not OCR transcription, model fine-tuning, or a replacement for geometric tracing.
+
+## Optional Gemini visual review
+
+1. Get a key at https://aistudio.google.com/apikey. Check Google's current availability, free-tier limits, pricing and data terms. This application cannot guarantee free API usage.
+2. Copy `.env.example` to `.env.local` in the project folder. Windows START.bat creates a blank-key template if the file is missing. Open it in Notepad and set `GEMINI_API_KEY=your-key`. Do not paste the real key into chat, GitHub or browser code.
+3. Restart START.bat. Environment variables override `.env.local`.
+4. Upload/open a drawing, choose a phase, save any edits, and check the box authorizing that drawing image to be sent to Google. Click **Review this phase with Gemini**.
+5. Review the returned issues and proposed labels. Select individual suggestions, then **Apply selected label suggestions**. Geometry, calibration, unit counts and apartment assignments are preserved. Applying a room role such as corridor can change exclusion-area calculations, so review those roles.
+
+Default model: `gemini-2.5-flash`. Set `GEMINI_MODEL` to an image-capable model available to your Google project if needed. The default local daily cap is five attempted calls, counted by UTC date; `GEMINI_DAILY_REQUEST_LIMIT=0` disables new requests. Errors count as attempts and are never automatically retried. Limits are per application data directory, not a Google billing cap. Google can still charge according to your account settings.
+
+Only an annotated image overview and up to eight detail crops leave the server; the original PDF, API key and printed area totals are not sent as text. Up to 60 detected region IDs are considered in one review. Responses are validated and cached by model, phase, image and drawing state. Cache hits do not consume the local cap. A changed drawing invalidates old suggestions. Local processing remains usable without a key, network access or quota.
+
+The API key stays server-side; `.env.local` is ignored by Git. Do not share that file. To use Gemini in the cloud environment, enter the key through environment settings instead of a local file. Live Gemini behavior is unverified until a valid key is provided; automated tests simulate provider responses, missing keys, quota errors, caching, stale results and invalid model output. No real API request is made by the test suite.

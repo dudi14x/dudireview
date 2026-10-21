@@ -47,3 +47,9 @@ Dashboard, project JSON, metrics and training configuration text files now use e
 Dark linework supplies only an outline proposal. A room-envelope guess no longer supplies a floor perimeter or clips room measurements. Legacy results are recalculated on read; re-uploading is required to regenerate geometry and legend detections. The current fixes do not establish accuracy on the newly screenshotted multi-wing plan, whose source PDF has not been supplied.
 
 Chromium checks passed for pending-scale guidance, four MEP locate buttons and purple-only highlighting, scale/boundary confirmation, save and reload. The tower PDF produces four legend-derived MEP vector candidates; the engineering PDF still has no automatic MEP classification. No new detector weights were trained or promoted in this correction.
+
+## Gemini and clickable phase workflow
+
+26 backend tests passed after adding optional Gemini review, including missing keys, zero/daily budget limits, request/image structure, cache hits, sanitized quota errors without retries, unknown region IDs, extra geometry/area fields, invalid confidence, explicit consent, selected label application and stale drawing rejection. Dependency checks passed.
+
+Chromium desktop and 390-pixel mobile checks passed for all three phase tabs, keyboard navigation, phase-specific overlays and controls, a simulated provider review, suggestion selection and application. No JavaScript errors were observed. These checks used fake provider replies; no actual Google API call or billing test was performed because no Gemini key was configured. They do not establish Gemini accuracy, model availability, free-tier eligibility, or improved detector geometry.
